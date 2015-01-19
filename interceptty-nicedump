@@ -1,0 +1,56 @@
+#!/usr/bin/perl
+
+# $Id: interceptty-nicedump,v 7.1 2000/05/03 04:41:24 sgifford Exp $
+
+#| = 1;
+
+while (<>)
+{
+  chomp;
+  s/^(.)\s+//;
+  if ($1 eq "<")
+  {
+    if ($dumpdir eq ">")
+    {
+      &dumpnow;
+    }
+    $dumpdir = $1;
+  }
+  elsif ($1 eq ">")
+  {
+    if ($dumpdir eq "<")
+    {
+      &dumpnow;
+    }
+    $dumpdir = $1;
+  } 
+  /^..(..)/; 
+  $hexchar = $1;
+  $bufhex .= " ".$hexchar;
+  if (/\((.*)\)/)
+  {
+    $bufasc .= "$1";
+  }
+  else
+  {
+    $bufasc .= " ";
+  }
+  $bufchars++;
+  if ($hexchar eq "0a") { &dumpnow }
+#  print "Char $bufchars: hex is '$bufhex', asc is '$bufasc', dumpdir is '$dumpdir'\n";
+  if ($bufchars >= 10)
+  {
+    &dumpnow;
+  }
+}
+
+&dumpnow;
+
+sub dumpnow
+{
+  return if ($bufchars == 0);
+  printf "%-s %-30s | %-10s\n",$dumpdir,$bufhex,$bufasc;
+  $bufchars=0;
+  $bufhex="";
+  $bufasc="";
+}

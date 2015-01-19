@@ -1,0 +1,356 @@
+=head1 NAME
+
+interceptty - Intercept traffic to and from a serial port.
+
+=head1 SYNOPSIS
+
+ Usage: ./interceptty [-V] [-qvl] [-s back-set] [-o output-file] 
+                      [-p pty-dev] [-t tty-dev] 
+                      [-m [pty-owner,[pty-group,]]pty-mode]
+                      [-u uid] [-g gid] [-/ chroot-dir]
+                      back-device front-device
+	back-device	Use back-device as the device to intercept
+		path		TTY dev is at /path
+		@/path		Socket is at /path
+		@host:port	Inet socket is at host:port
+		!prog		Run prog for backend
+		=rfd[,wfd]	Use file descriptors
+	front-device	Use front-device as the device applications connect to
+		path		Create symlink at /path
+		@/path		Socket at /path
+		@host:port	Inet socket at host:port
+		=rfd[,wfd]	Use file descriptors
+			'-' to prevent creating a front-device.
+			Doesn't currently do anything.
+	-l		Line-buffer output
+	-o output-file	Write intercepted data to output-file
+	-s back-stty	Use given settings to set up back-device
+			These settings are passed directly to stty(1).
+        -m pty-mode     Specify permissions for the new pty.
+                        Format is [pty-owner,[pty-group,]]pty-mode]
+        -u uid          Switch to given uid after setting up (must be root)
+        -g gid          Switch to given gid after setting up (must be root)
+        -/ chroot-dir   chroot(2) to given dir after setting up (must be root)
+	-q		Activate quiet mode
+	-v		Activate verbose mode
+	-V		Print version number then exit
+	-p pty-dev	Full path to pty device for front-end (used internally)
+	-t tty-dev	Full path to tty device for front-end (used externally)
+
+=head1 DESCRIPTION
+
+interceptty is designed to sit between a serial port (or other
+terminal device, or program, or socket, or something connected to a
+file descriptor) and a program which is communicating with that
+device, recording everything that goes back and forth between the two.
+It does this by opening the real device, creating a pseudo-tty, then
+forwarding everything between the two, recording whatever it sees.  It
+has a number of options that let you fine-tune the devices it uses and
+the terminal options for the real device.
+
+With the support for various backend types, interceptty is also useful
+to create a fake serial port that will talk to the network or to a
+program you've written.  The -q switch will turn off its logging
+output, and you can read about the different backends further down.
+
+The output of interceptty is a somewhat ugly, rudimentary format that
+I usually postprocess through interceptty-nicedump, an included Perl
+script.  More information about the output format is included later,
+in the Output section.
+
+To stop interceptty, press CTRL-C.  It doesn't exit under any other
+circumstances except error conditions.
+
+=head2 Command-Line
+
+=over 4
+
+=item I<back-device>
+
+Use I<back-device> as the backend device---the device to which
+I<interceptty> connects.  Normally it will be a character-special
+device file, like a serial port or other tty-compatible device.  You
+can instruct interceptty to use other things for your backend by using
+a I<back-device> that starts with one of several special characters.
+
+If I<back-device> starts with an C<@> and contains a slash (C</>), it
+will be treated as a Unix socket.
+
+If I<back-device> starts with an C<@> and I<doesn't> contain a slash
+(C</>), it will be treated as an Internet hostname, followed by a
+colon, followed by a port.  interceptty will connect to that address
+and port.
+
+If I<back-device> starts with an exclamation point (C<!>), it will be
+treated as a program to run.  That program will be started up, and its
+standard input and output will be connected to the frontend.
+
+If I<back-device> starts with an equal sign (C<=>), it will be treated
+as a file descriptor to use, or a comma-seperated pair of file
+descriptors.  The first file descriptor will be used for reading, and
+the second for writing; if only one is specified, it will be used for
+both.  These descriptors must already be opened by the program that
+started interceptty.
+
+=item I<front-device>
+
+Use I<front-device> as the frontend device---the device to which other
+applications should connect to talk to the backend device through
+interceptty.  Normally interceptty will create a pseudo-terminal, then
+create a symlink to the master device at I<front-device>.  You can
+control whether and how it creates a pseudo-terminal with the I<-t>
+and I<-p> options.  You can have it create no symlink by giving a
+I<front-device> of a single dash (C<->), and you can use things other
+than pseudo-terminals as a frontend by using a I<front-device> that
+starts with one of several special characters.
+
+If I<front-device> starts with an C<@> and contains a slash (C</>), it
+will be treated as a Unix socket.  interceptty will create this
+socket, and listen for connections.  This is the mode to use for newer
+versions of I<VMWare>.
+
+If I<front-device> starts with an C<@> and I<doesn't> contain a slash
+(C</>), it will be treated as a local interface name to listen on,
+followed by a colon, followed by a port.  interceptty will listen on
+that interface and port.  Use an interface name of 0 to listen on all
+local interfaces.
+
+If I<front-device> starts with an equal sign (C<=>), it will be
+treated as a file descriptor to use, or a comma-seperated pair of file
+descriptors.  The first file descriptor will be used for reading, and
+the second for writing; if only one is specified, it will be used for
+both.  These descriptors must already be opened by the program that
+started interceptty.  This is useful for running interceptty under
+another program, such as I<tcpserver>, I<inetd>, or I<stunnel>.
+
+
+=item -l
+
+Line-buffer output, displaying the intercepted data immediately as it
+comes in.
+
+=item -o I<output-file>
+
+Write output to I<output-file> instead of standard output.
+
+=item -s I<back-stty>
+
+Run I<stty> with the given options on the backend, to configure it.
+You can use this to set the baud rate, character size, etc.  You
+should only use this if you have a TTY as your back-end.
+
+=item -q
+
+Be quiet.  Don't display intercepted data, and only display errors.
+
+=item -v
+
+Be verbose.  Asks interceptty to just say whatever's on its mind.
+Useful for debugging.
+
+=item -V
+
+Print the version number and exit.
+
+=item -p I<pty-dev>
+
+Use I<pty-dev> as the physical frontend device that interceptty should
+connect to, instead of creating a pseudo-tty.  This should be a
+TTY-compatible device, such as a serial port.
+
+=item -t I<tty-dev>
+
+Use I<tty-dev> as the device that an application should connect to,
+such as the other end of a pseudo-tty.  This device is opened and a
+symlink is created to it, and that's all.  If you're using a device
+that doesn't have two sides to connect to, like a serial port, don't
+use this option, and specify C<-> for the frontend.
+
+=back
+
+
+
+=head2 Output
+
+interceptty prints its output in a fairly unattractive, painful to
+look at format.  However, it is very easy for other programs to parse.
+For an example of how to post-process this output into something
+appropriate to whatever you are intercepting, see the included Perl
+script I<interceptty-nicedump>.
+
+Output lines are in this general format:
+
+ < 0x54 (T)
+ >       0x4b (K)
+ ^ Direction
+   ^^^^ Hex code (to real device)
+        ^^^ ASCII character (to real device)
+         ^^^^ Hex code (from real device)
+              ^^^ ASCII character (from real device)
+
+The direction marker is a '<' if this character was sent I<to> the
+backend device, and '>' if it was received I<from> the backend device.
+It is always followed by a single space.  If the character was
+received from the real device, a tab will appear next (this makes the
+output easier to follow).  After that is the hex code for the
+character, and the ASCII representation of the character if it is an
+ASCII character.
+
+
+=head1 EXAMPLES
+
+Here's some examples of some common, useful, or interesting tasks you
+can use interceptty for.
+
+=over 4
+
+=item VMWare
+
+I wrote this program to watch what a program running under I<VMWare>
+version 2 (L<http://www.vmware.com/>) was sending to the serial port.
+To do that, I ran:
+  
+        interceptty -s 'ispeed 19200 ospeed 19200' -l /dev/ttyS0 |
+		    interceptty-nicedump 
+
+then configured I<VMWare> to use /tmp/interceptty for COM1.
+
+Newer versions of I<VMware> use a socket.  You can use them like this:
+
+        interceptty -s 'ispeed 19200 ospeed 19200' -l \
+                    /dev/ttyS0 @/tmp/sersock |
+		    interceptty-nicedump 
+
+then configure VMWare to use a "named pipe" at /tmp/sersock.
+
+You must start interceptty before you connect the serial device under
+VMWare.  If you stop interceptty with CTRL-C, or if it otherwise shuts
+down, once you have connected it, you will need to disconnect and
+reconnect COM1 before it will work again.
+
+
+=item External Serial Monitor
+
+If you want to use interceptty as an external serial monitor---connected to
+two serial ports on your machine and relaying between them, while
+recording the output---you can use one device as the backend, and use
+the I<-p> option to tell the frontend not to create it's own tty, but
+just use the one you tell it:
+
+    interceptty -s 'ispeed 19200 ospeed 19200' /dev/ttyS0 \
+      -p /dev/ttyS1 -
+
+That lets you monitor serial communication between two non-PC
+devices.  It's likely you'll need to use a null-modem cable to connect
+one of the devices.
+
+
+=item Network serial port server
+
+If you have a device connected to your serial port that you want to
+make available over the network, you can create a socket frontend.
+If you just want to create a serial server without monitoring the
+traffic, you can use the -q option:
+
+    interceptty -q -s 'ispeed 19200 ospeed 19200' /dev/ttyS0 \
+      '@0:4001'
+
+Note that this doesn't allow any kind of access control, but you can
+run it under a program that does provide access control, like
+tcpserver.  See the example below.
+
+=item Network serial port client
+
+If you have a device available over a network serial port using a
+simple TCP connection or a telnet connection, you can create a virtual
+serial port on your system connected to it by using the network device
+as a backend.  I've tested this with several different
+serial-to-Ethernet adapters available on the market.
+
+    interceptty -q '@serial-server.example.com:4001' \
+      /dev/serial-server
+
+Some Digi brand serial-to-Ethernet adapters can use I<ssh>.  To
+connect to this, you can use a program backend:
+
+    interceptty -q '!ssh -p 4001 serial-server.example.com' \
+      /dev/serial-server
+
+=item Running under tcpserver/inetd/stunnel
+
+To run under tcpserver or inetd, make sure that logging is turned off
+or directed to a file, then configure a backend of file descriptors 0
+and 1:
+
+    tcpserver 0 9999 \
+      interceptty -q -s 'ispeed 19200 ospeed 19200' /dev/ttyS0 =0,1
+
+=back
+
+=head1 SECURITY
+
+While an effort has been made to make sure that this code is free of
+security issues, it has not been thoroughly audited, and should not
+under any circumstances be set-UID or set-GID to anything.  If nothing
+else, the '-s' option will probably allow shell escapes, and using a
+program back-end is also dangerous.
+
+If this program is run as root, it will set up the pty portion of its
+pseudo-terminal to be only readable by itself, and will copy the
+ownership and permissions from the real device to the tty portion.  It
+tries to change this back before exiting, but if it crashes such that
+it doesn't get to run its cleanup code, the ownership and permission
+will stay the same.
+
+If it is not run as root, it will make no effort to change the
+permissions on the pseudo-terminal.  If you need to do this, select a
+pseudo-terminal in advance, set the permissions appropriately, and use
+the '-p' and '-t' options to instruct interceptty to use that device
+instead of picking its own.
+
+
+=head1 SEE ALSO
+
+L<stty(1)>, L<minicom(1)>, L<tip(1)>.
+
+=head1 LICENSE
+
+Copyright 2000-2004 by Scott Gifford E<lt>sgifford@suspectclass.comE<gt>
+This software is licensed under the GNU Public License.  See the file
+COPYING included with this distribution for details
+
+
+=head1 BUGS
+
+You must set all serial options, such as baud rate, flow control,
+etc., up front with the '-s' option.  Any settings that the
+application sets using interceptty's pseudo-terminal will be ignored.
+I can't find a way around this; if you have ideas, please let me know.
+
+We make no attempt to lock backend device.  We probably should, but I
+don't know how to do it portably.  If somebody has a nice API function
+I can call, I will happily add locking support in.
+
+This program has only been tested under Linux, although the code is
+fairly portable.  I don't have access to another machine with serial
+ports I can play with, so I haven't tried to port it.  I probably
+won't port this to any other machines, but if you manage to, please
+send me the patches and I will include them in future distributions.
+I have recently added autoconf support, which may be useful in making
+this program more portable.  But to be honest, I just used it so I
+could get "make dist".
+
+
+=head1 HISTORY
+
+interceptty is based in larte part on ttysnoop-0.12d, by Carl
+Declerck.  Any bugs with interceptty should be reported to me, and not
+to Carl.  I basically adapted ttysnoop for my foul purposes, removed
+the parts that weren't necessary anymore, and added appropriate option
+processing.  ttysnoop was licensed under the GPL, and I have of course
+kept that license for interceptty.
+
+=head1 AUTHOR
+
+Scott Gifford E<lt>sgifford@suspectclass.comE<gt>
+

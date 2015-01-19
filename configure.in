@@ -1,0 +1,77 @@
+dnl Process this file with autoconf to produce a configure script.
+AC_INIT(interceptty.c)
+AM_INIT_AUTOMAKE(interceptty, 0.6)
+AM_CONFIG_HEADER(config.h)
+
+dnl Checks for programs.
+AC_PROG_CC
+AC_PROG_INSTALL
+
+dnl Checks for header files.
+AC_HEADER_STDC
+AC_HEADER_SYS_WAIT
+AC_CHECK_HEADERS(fcntl.h sys/ioctl.h unistd.h util.h sys/stropts.h pty.h)
+
+dnl    Checks for libutil functions
+AC_CHECK_FUNCS(logout updwtmp logwtmp)
+AC_ARG_ENABLE(libutil,
+	[  --disable-libutil       disable use of libutil (openpty() etc.) (no)])
+AC_ARG_ENABLE(openpty,
+	[  --disable-openpty       disable use of openpty (no)])
+
+if test "x$enable_libutil" != "xno" ; then
+	AC_CHECK_HEADERS(util.h)
+	AC_CHECK_HEADERS(libutil.h)
+	if test "x$enable_openpty" != "xno"; then
+	   AC_CHECK_FUNCS(openpty)
+	   AC_SEARCH_LIBS(openpty, util bsd, [AC_DEFINE(HAVE_OPENPTY,1,Define to 1 if you have the BSD openpty function)])
+	fi
+fi
+
+dnl Checks for library functions.
+AC_TYPE_SIGNAL
+AC_CHECK_LIB(nsl,gethostbyname)
+AC_CHECK_LIB(socket, setsockopt, , , setsockopt)
+AC_CHECK_FUNCS(_getpty select strerror)
+
+# Check for some target-specific stuff
+case "$host" in
+*-cygwin*)
+        check_for_libcrypt_later=1
+        LIBS="$LIBS /usr/lib/textmode.o"
+        AC_DEFINE(HAVE_CYGWIN,1,Define to 1 if compiling under cygwin)
+        ;;
+esac
+
+
+AC_ARG_ENABLE(dev-ptmx,
+	[  --disable-dev-ptmx      disable use of /dev/ptmx (no)])
+
+if test "x$enable_dev_ptmx" != "xno" ; then
+	AC_CHECK_FILE("/dev/ptmx",
+		[
+               		AC_DEFINE(HAVE_DEV_PTMX,1,Define to 1 if you have a /dev/ptmx device)
+                       	have_dev_ptmx=1
+		]
+	)
+fi
+
+
+AC_ARG_ENABLE(dev-ptc,
+	[  --disable-dev-ptc       disable use of /dev/ptc (no)])
+
+if test "x$enable_dev_ptc" != "xno" ; then
+	AC_CHECK_FILE("/dev/ptc",
+		[
+			AC_DEFINE(HAVE_DEV_PTS_AND_PTC,1,Define to 1 if you have a /dev/ptc device)
+			have_dev_ptc=1
+		]
+	)
+fi
+
+
+
+
+AC_OUTPUT(Makefile)
+
+dnl $Id: configure.in,v 7.9 2004/09/05 22:46:57 gifford Exp $

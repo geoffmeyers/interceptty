@@ -1,0 +1,71 @@
+Version 0.6 (9/5/2004)
+======================
+
+Important fixes for running as root systems with /dev/ptmx!  Earlier
+versions screwed up permissions on /dev/ptmx on some systems, making a
+real mess.
+
+Other features useful for running as root: Can now set permissions on
+pty, and also chroot and switch UID/GID after opening devices.
+
+If permissions are set on the pty, create a process to monitor
+interceptty for exit, and when it finishes fix up permissions.  This
+makes sure permissions get reset even if interceptty dies
+unexpectedly, and also allows us to reset a pty owner even if we've
+dropped privileges.  This isn't necessary on modern systems, but
+doesn't hurt.
+
+Version 0.5 (7/3/2004)
+======================
+
+Many portability fixes.  Lifted PTY code from OpenSSH.  Tested on RedHat
+7.2, Fedora Core 2, Solaris 2.8, OpenBSD 2.9.  Should be portable to
+all platforms OpenSSH is, although it may need some fixes.
+
+Version 0.4 (6/27/2004)
+=======================
+
+Added all sorts of new backends, and some new frontends too, including
+new VMWare compatability.  See the manpage for more information.
+
+Added a manpage.
+
+We don't poll when our first client goes away now.
+
+Signal handling using sigaction, and should be more reliable.
+
+Add some switches, to reduce the amount of output and print the
+version.
+
+Use -Wall compiler flags.
+
+
+Version 0.3
+===========
+Fixed a problem with option parsing that prevented the 'front-device'
+option from working.
+
+Version 0.2b
+============
+Replaced accidental inclusion of an incorrect COPYING file.
+
+Version 0.2
+===========
+
+Modified to use GNU autoconf.
+
+Fixed a problem with option parsing that prevented '-t' from working.
+
+Re-formatted the whole thing, converting from the ttysnoop-style to my
+own preferred style.
+
+Version 0.1b
+===========
+Fixed a compilation problem.
+
+Version 0.1
+===========
+This is the first release.
+
+
+$Id: NEWS,v 7.7 2004/09/05 22:42:29 gifford Exp $

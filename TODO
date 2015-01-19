@@ -1,0 +1,10 @@
+Review code for correctness, security, and efficiency.
+
+Handle permissions on pseudo-tty's we create.
+
+This should really be a simple, tty-specific program, with other
+  programs (like tcpserver, netcat, or the shell) used to provide the
+  more complex functionality.
+
+Proper device locking, using whatever's appropriate according to local
+  custom.

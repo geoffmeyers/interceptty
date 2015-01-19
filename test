@@ -1,0 +1,148 @@
+#!/bin/bash
+
+# You can run this script after building to test out interceptty in a
+# safe way.
+
+# These two settings are adjustable, although the defaults will
+# probably work fine.
+
+INET_PORT=9999
+DELAY=2
+
+trap 'exec 2>/dev/null; [ -n "$kids" ] && kill $kids' EXIT
+
+printf "%40s" "Starting up echo server..."
+./interceptty -q '!cat' ./test1.tty &
+kids="$kids $!"
+sleep $DELAY
+if [ -c ./test1.tty ]
+then
+  echo "OK"
+else
+  echo "NO"
+  exit 1
+fi
+
+printf "%40s" "Testing echo server..."
+if ./testport ./test1.tty "Test 1 OK"
+then
+  echo "OK"
+else
+  echo "NO"
+  exit 1
+fi
+
+
+printf "%40s" "Starting up tty server..."
+./interceptty -q ./test1.tty ./test2.tty &
+kids="$kids $!"
+sleep $DELAY
+if [ -c ./test2.tty ]
+then
+  echo "OK"
+else
+  echo "NO"
+  exit 1
+fi
+
+printf "%40s" "Testing tty server..."
+if ./testport ./test2.tty "Test 2 OK"
+then
+  echo "OK"
+else
+  echo "NO"
+  exit 1
+fi
+
+
+printf "%40s" "Starting Unix socket server..."
+./interceptty -q ./test2.tty @./test3.sock &
+kids="$kids $!"
+sleep $DELAY
+if [ -r ./test3.sock ]
+then
+  echo "OK"
+else
+  echo "NO"
+  exit 1
+fi
+
+printf "%40s" "Starting Unix socket client..."
+./interceptty -q @./test3.sock ./test4.tty &
+kids="$kids $!"
+sleep $DELAY
+if [ -c ./test4.tty ]
+then
+  echo "OK"
+else
+  echo "NO"
+  exit 1
+fi
+
+printf "%40s" "Testing Unix sockets..."
+if ./testport ./test4.tty "Test 4 OK"
+then
+  echo "OK"
+else
+  echo "NO"
+  exit 1
+fi
+
+
+printf "%40s" "Starting file descriptor server..."
+./interceptty -q =0,1 ./test5.tty <test4.tty >>test4.tty  &
+kids="$kids $!"
+sleep $DELAY
+if [ -c ./test5.tty ]
+then
+  echo "OK"
+else
+  echo "NO"
+  exit 1
+fi
+
+printf "%40s" "Testing file descriptors..."
+if ./testport ./test5.tty "Test 5 OK"
+then
+  echo "OK"
+else
+  echo "NO"
+  exit 1
+fi
+
+
+printf "%40s" "Starting Inet server on port $INET_PORT..."
+./interceptty -q ./test5.tty @localhost:$INET_PORT &
+kids="$kids $!"
+sleep $DELAY
+# The netstat test we used to do doesn't work in some configurations.
+echo "OK"
+
+printf "%40s" "Starting Inet client on port $INET_PORT..."
+./interceptty -q @localhost:$INET_PORT ./test6.tty  &
+kids="$kids $!"
+sleep $DELAY
+if [ -c ./test6.tty ]
+then
+  echo "OK"
+else
+  echo "NO"
+  echo "You may want to try changing the port used for testing, at the top of $0."
+  exit 1
+fi
+
+printf "%40s" "Testing Internet socket server..."
+if ./testport ./test6.tty "Test 6 OK"
+then
+  echo "OK"
+else
+  echo "You may want to try changing the port used for testing, at the top of $0."
+  echo "NO"
+  exit 1
+fi
+
+
+
+
+
+exit 0
