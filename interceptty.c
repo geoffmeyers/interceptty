@@ -31,6 +31,7 @@
 #include <netdb.h>
 #include <pwd.h>
 #include <grp.h>
+#include <sys/time.h>
 
 #include "bsd-openpty.h"
 #include "common.h"
@@ -61,7 +62,8 @@ char    *backend = NULL,
   *opt_ttyname = NULL;
 int     verbose = 0,
   linebuff = 0,
-  quiet = 0;
+  quiet = 0,
+  timestamp = 0;
 int     created_link = 0;
 char    last_pty[TTYLEN] = "",
   last_tty[TTYLEN] = "";
@@ -231,9 +233,30 @@ void dumpbuff(int dir, char *buf, int buflen)
 {
   int i;
   int ic;
+
+  enum { TSTAMP_SZ = 24 };
+  char tstamp[TSTAMP_SZ] = { 0 };
+  struct timeval timeVal;
+  if (timestamp)
+      gettimeofday(&timeVal, NULL);
   
   for (i=0;i<buflen;i++)
   {
+    if (timestamp)
+    {
+      if (tstamp[0] == 0)
+      {
+        char sec[9], usec[9];
+        snprintf(sec, 9, "%08lu", timeVal.tv_sec);
+        snprintf(usec, 9, "%08lu", timeVal.tv_usec);
+        snprintf(tstamp, TSTAMP_SZ, "[%s:%s]   ", sec, usec);
+      }
+      else if (tstamp[0] == '[')
+      {
+        memset(tstamp, ' ', strnlen(tstamp, TSTAMP_SZ));
+      }
+      fprintf(outfile, "%s", tstamp);
+    }
     if (dir)
     {
       fprintf(outfile, "> \t");
@@ -713,7 +736,7 @@ int main (int argc, char *argv[])
   outfile = stdout;
 
   /* Process options */
-  while ((c = getopt(argc, argv, "Vlqvs:o:p:t:m:u:g:/:")) != EOF)
+  while ((c = getopt(argc, argv, "VTlqvs:o:p:t:m:u:g:/:")) != EOF)
     switch (c) {
       case 'q':
 	quiet=1;
@@ -775,6 +798,9 @@ int main (int argc, char *argv[])
       case 'V':
 	puts(VERSION);
 	exit(0);
+      case 'T':
+        timestamp = 1;
+        break;
       case '?':
       default:
         errflg++;
