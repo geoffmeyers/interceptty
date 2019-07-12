@@ -246,9 +246,9 @@ void dumpbuff(int dir, char *buf, int buflen)
     {
       if (tstamp[0] == 0)
       {
-        char sec[9], usec[9];
+        char sec[9], usec[7];
         snprintf(sec, 9, "%08lu", timeVal.tv_sec);
-        snprintf(usec, 9, "%08lu", timeVal.tv_usec);
+        snprintf(usec, 7, "%06lu", timeVal.tv_usec);
         snprintf(tstamp, TSTAMP_SZ, "[%s:%s]   ", sec, usec);
       }
       else if (tstamp[0] == '[')
