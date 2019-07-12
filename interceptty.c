@@ -63,7 +63,11 @@ char    *backend = NULL,
 int     verbose = 0,
   linebuff = 0,
   quiet = 0,
-  timestamp = 0;
+  timestamp = 0,
+  use_eol_ch = 0,
+  print_hex = 1,
+  print_chrs = 1;
+char    eol_ch = 0;
 int     created_link = 0;
 char    last_pty[TTYLEN] = "",
   last_tty[TTYLEN] = "";
@@ -229,20 +233,45 @@ gid_t find_gid(const char *g)
 
 /* main program */
 
+const char *char_repr(unsigned char ch)
+{
+  enum { RESP_SZ = 6, LOW_CRTL_SZ = 33 };
+  static char response[RESP_SZ] = {0};
+  /* https://en.wikipedia.org/wiki/Control_character */
+  static const char lowCtrlChrs[LOW_CRTL_SZ][RESP_SZ] = {
+    "[NUL]", "[SOH]", "[STX]", "[ETX]", "[EOT]", "[ENQ]", "[ACK]", "[BEL]",
+    "[BS]",  "[TAB]", "[LF]",  "[VT]",  "[FF]",  "[CR]",  "[SO]",  "[SI]",
+    "[DLE]", "[DC1]", "[DC2]", "[DC3]", "[DC4]", "[NAK]", "[SYN]", "[ETB]",
+    "[CAN]", "[EM]",  "[SUB]", "[ESC]", "[FS]",  "[GS]",  "[RS]",  "[US]",
+    "' '" /* for space */
+  };
+
+  if (ch < 32)
+    return lowCtrlChrs[ch];
+  else if (ch == 127)
+    return "[DEL]";
+
+  snprintf(response, RESP_SZ, "%c", ch);
+  return response;
+}
+
+
 void dumpbuff(int dir, char *buf, int buflen)
 {
   int i;
   int ic;
-
+  int lineChCnt = 0;
   enum { TSTAMP_SZ = 24 };
   char tstamp[TSTAMP_SZ] = { 0 };
   struct timeval timeVal;
+
   if (timestamp)
-      gettimeofday(&timeVal, NULL);
+    gettimeofday(&timeVal, NULL);
   
   for (i=0;i<buflen;i++)
   {
-    if (timestamp)
+    /* timestamp stuff */
+    if (timestamp && lineChCnt < 1)
     {
       if (tstamp[0] == 0)
       {
@@ -257,21 +286,56 @@ void dumpbuff(int dir, char *buf, int buflen)
       }
       fprintf(outfile, "%s", tstamp);
     }
-    if (dir)
+    /* origin arrows */
+    if (lineChCnt < 1)
     {
-      fprintf(outfile, "> \t");
+      if (dir)
+      {
+        fprintf(outfile, "> ");
+        if (lineChCnt < 1)
+          fprintf(outfile, "\t");
+      }
+      else
+      {
+        fprintf(outfile, "< ");
+      }
     }
-    else
-    {
-      fprintf(outfile, "< ");
-    }
+    /* print value */
     ic=(unsigned char)buf[i];
-    fprintf(outfile, "0x%02x",ic);
-    if ( (buf[i] >= 33) && (buf[i] <= 126) )
+    if (print_hex)
     {
-      fprintf(outfile, " (%c)",buf[i]);
+      /* compact if using lineendings */
+      if (use_eol_ch)
+        fprintf(outfile, "%02x", ic);
+      else
+        fprintf(outfile, "0x%02x",ic);
     }
-    fprintf(outfile, "\n");
+    if (print_chrs)
+    {
+      if (print_hex)
+      {
+        if (!use_eol_ch)
+          fprintf(outfile, " (%s)", char_repr(buf[i]));
+        else
+          fprintf(outfile, "(%s)", char_repr(buf[i]));
+      } else {
+        if (!use_eol_ch)
+          fprintf(outfile, " %s", char_repr(buf[i]));
+        else
+          fprintf(outfile, "%s", char_repr(buf[i]));
+      }
+    }
+    if (use_eol_ch)
+    {
+      /* should we end line? */
+      lineChCnt = (ic == eol_ch) ? 0 : lineChCnt +1;
+      /* separator */
+      if (i + 1 < buflen && lineChCnt > 0)
+        fprintf(outfile, ":");
+
+    }
+    if (lineChCnt < 1 || i == (buflen - 1))
+      fprintf(outfile, "\n");
   }
   fflush(outfile);
 }
@@ -709,6 +773,10 @@ void usage(char *name)
 "-/ chroot-dir\tchroot(2) to given dir after setting up (must be root)\n"
 "\t-q\t\tActivate quiet mode\n"
 "\t-v\t\tActivate verbose mode\n"
+"\t-T\t\tPrint timestamps in [epoch sec:usec]\n"
+"\t-e EOL\t\tFormat output line by line where EOL is end of line\n"
+"\t\t\t  EOL can be any char or a number from 0-255\n"
+"\t-f <hex|chars>\tChooses output in hex or chars, default is to print both\n"
 "\t-V\t\tPrint version number then exit\n"
 "\t-p pty-dev\tFull path to pty device for front-end (used internally)\n"
 "\t-t tty-dev\tFull path to tty device for front-end (used externally)\n"
@@ -736,7 +804,7 @@ int main (int argc, char *argv[])
   outfile = stdout;
 
   /* Process options */
-  while ((c = getopt(argc, argv, "VTlqvs:o:p:t:m:u:g:/:")) != EOF)
+  while ((c = getopt(argc, argv, "VTlqvs:o:p:t:m:u:g:/:e:f:")) != EOF)
     switch (c) {
       case 'q':
 	quiet=1;
@@ -785,7 +853,7 @@ int main (int argc, char *argv[])
 	switch_gid = find_gid(optarg);
 	break;
       case '/':
-	switch_root = strdup(optarg);
+        switch_root = strdup(optarg);
 	break;
       case 's':
         settings = optarg;
@@ -794,6 +862,32 @@ int main (int argc, char *argv[])
         outfilename=optarg;
         if ( (outfile = fopen(outfilename,"w")) == NULL)
           errorf("Couldn't open output file '%s' for write: %s\n",outfilename,strerror(errno));
+        break;
+      case 'e':
+        scratch = optarg;
+        use_eol_ch = 1;
+
+        n = (int)strnlen(optarg, 10);
+        sel = strtol(optarg, &scratch, 0);
+        if (scratch == optarg + n && n > 0)
+        {
+          /* its a number */
+          if (sel > 0xff || sel < 0)
+            errorf("EOL numbers must be 0-255\n");
+          eol_ch = (char)sel;
+        }
+        else if (n != 1)
+          errorf("End of line char must be 1 char or a number\n");
+
+        fprintf(stdout, "# Using '%s' as end of line char\n", char_repr(eol_ch));
+        break;
+      case 'f':
+        if (strncmp("char", optarg, 10) == 0)
+          print_hex = 0;
+        else if(strncmp("hex", optarg, 10) == 0)
+          print_chrs = 0;
+        else
+          errorf("Must give either 'hex' or 'char' to -f switch\n");
         break;
       case 'V':
 	puts(VERSION);
