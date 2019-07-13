@@ -275,8 +275,9 @@ void dumpbuff(int dir, char *buf, int buflen)
     {
       if (tstamp[0] == 0)
       {
-        char sec[9], usec[7];
-        snprintf(sec, 9, "%08lu", timeVal.tv_sec);
+        char sec[20], usec[7];
+        snprintf(sec, 20, "%0lu", timeVal.tv_sec);
+        memmove(&sec[0], &sec[ strlen(sec) - 8], 8);
         snprintf(usec, 7, "%06lu", timeVal.tv_usec);
         snprintf(tstamp, TSTAMP_SZ, "[%s:%s]   ", sec, usec);
       }
