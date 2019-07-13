@@ -32,6 +32,7 @@
 #include <pwd.h>
 #include <grp.h>
 #include <sys/time.h>
+#include <time.h>
 
 #include "bsd-openpty.h"
 #include "common.h"
@@ -275,11 +276,11 @@ void dumpbuff(int dir, char *buf, int buflen)
     {
       if (tstamp[0] == 0)
       {
-        char sec[20], usec[7];
-        snprintf(sec, 20, "%0lu", timeVal.tv_sec);
-        memmove(&sec[0], &sec[ strlen(sec) - 8], 8);
-        snprintf(usec, 7, "%06lu", timeVal.tv_usec);
-        snprintf(tstamp, TSTAMP_SZ, "[%s:%s]   ", sec, usec);
+        char dtime[9];
+        struct tm *now = localtime(&timeVal.tv_sec);
+        strftime(dtime, sizeof(dtime), "%H:%M %S", now);
+        snprintf(tstamp, sizeof(tstamp), "[%s.%06ld]", dtime, timeVal.tv_usec);
+        //snprintf(tstamp, TSTAMP_SZ, "[%s:%s]   ", sec, usec);
       }
       else if (tstamp[0] == '[')
       {
@@ -774,7 +775,7 @@ void usage(char *name)
 "-/ chroot-dir\tchroot(2) to given dir after setting up (must be root)\n"
 "\t-q\t\tActivate quiet mode\n"
 "\t-v\t\tActivate verbose mode\n"
-"\t-T\t\tPrint timestamps in [epoch sec:usec]\n"
+"\t-T\t\tPrint timestamps in format [HH:mm SS:usec]\n"
 "\t-e EOL\t\tFormat output line by line where EOL is end of line\n"
 "\t\t\t  EOL can be any char or a number from 0-255\n"
 "\t-f <hex|chars>\tChooses output in hex or chars, default is to print both\n"
