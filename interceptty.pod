@@ -4,8 +4,8 @@ interceptty - Intercept traffic to and from a serial port.
 
 =head1 SYNOPSIS
 
- Usage: ./interceptty [-V] [-qvl] [-s back-set] [-o output-file] 
-                      [-p pty-dev] [-t tty-dev] 
+ Usage: ./interceptty [-V] [-qvlr] [-s back-set] [-o output-file]
+                      [-p pty-dev] [-t tty-dev]
                       [-m [pty-owner,[pty-group,]]pty-mode]
                       [-u uid] [-g gid] [-/ chroot-dir]
                       back-device front-device
@@ -23,6 +23,7 @@ interceptty - Intercept traffic to and from a serial port.
 			'-' to prevent creating a front-device.
 			Doesn't currently do anything.
 	-l		Line-buffer output
+  -r		Raw output mode (unformatted backend stream)
 	-o output-file	Write intercepted data to output-file
 	-s back-stty	Use given settings to set up back-device
 			These settings are passed directly to stty(1).
@@ -128,6 +129,13 @@ another program, such as I<tcpserver>, I<inetd>, or I<stunnel>.
 
 Line-buffer output, displaying the intercepted data immediately as it
 comes in.
+
+=item -r
+
+Raw output mode. Intercepted bytes from the backend stream are written
+exactly as received, without direction markers, hex formatting, or
+character annotations. This avoids duplicate characters on echoing
+serial devices(e.g. Linux terminal).
 
 =item -o I<output-file>
 

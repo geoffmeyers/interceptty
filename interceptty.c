@@ -63,6 +63,7 @@ char    *backend = NULL,
   *opt_ttyname = NULL;
 int     verbose = 0,
   linebuff = 0,
+  raw_mode = 0,
   quiet = 0,
   timestamp = 0,
   use_eol_ch = 0,
@@ -265,6 +266,15 @@ void dumpbuff(int dir, char *buf, int buflen)
   enum { TSTAMP_SZ = 24 };
   char tstamp[TSTAMP_SZ] = { 0 };
   struct timeval timeVal;
+
+  if (raw_mode)
+  {
+    if (!dir)
+      return;
+    fwrite(buf, 1, buflen, outfile);
+    fflush(outfile);
+    return;
+  }
 
   if (timestamp)
     gettimeofday(&timeVal, NULL);
@@ -744,7 +754,7 @@ int setup_frontend(int f[2])
 
 void usage(char *name)
 {
-  fprintf(stderr,"Usage: %s [-V] [-qvl] [-s back-set] [-o output-file]\n"
+  fprintf(stderr,"Usage: %s [-V] [-qvlr] [-s back-set] [-o output-file]\n"
                 "       %*s [-p pty-dev] [-t tty-dev]\n"
                 "       %*s [-m [pty-owner,[pty-group,]]pty-mode]\n"
                 "       %*s [-u uid] [-g gid] [-/ chroot-dir]\n"
@@ -765,6 +775,7 @@ void usage(char *name)
 "\t\t\t'-' to prevent creating a front-device.\n"
 "\t\t\tDoesn't currently do anything.\n"
 "\t-l\t\tLine-buffer output\n"
+"\t-r\t\tRaw output mode (unformatted backend stream)\n"
 "\t-o output-file\tWrite intercepted data to output-file\n"
 "\t-s back-stty\tUse given settings to set up back-device\n"
 "\t\t\tThese settings are passed directly to stty(1).\n"
@@ -806,11 +817,14 @@ int main (int argc, char *argv[])
   outfile = stdout;
 
   /* Process options */
-  while ((c = getopt(argc, argv, "VTlqvs:o:p:t:m:u:g:/:e:f:")) != EOF)
+  while ((c = getopt(argc, argv, "VTlqrvs:o:p:t:m:u:g:/:e:f:")) != EOF)
     switch (c) {
       case 'q':
 	quiet=1;
 	break;
+      case 'r':
+        raw_mode = 1;
+        break;
       case 'v':
         verbose = 1;
         break;
